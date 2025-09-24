@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lightrag</title>
+    <script type="module" crossorigin src="/webui/assets/index-C3sDhLdo.js"></script>
+    <link rel="modulepreload" crossorigin href="/webui/assets/react-vendor-DEwriMA6.js">
+    <link rel="modulepreload" crossorigin href="/webui/assets/ui-vendor-CeCm8EER.js">
+    <!-- 禁用知识图谱功能 - 注释掉图相关资源 -->
+    <!-- <link rel="modulepreload" crossorigin href="/webui/assets/graph-vendor-B-X5JegA.js"> -->
+    <link rel="modulepreload" crossorigin href="/webui/assets/utils-vendor-BysuhMZA.js">
+    <!-- <link rel="modulepreload" crossorigin href="/webui/assets/feature-graph-Chuw_ipx.js"> -->
+    
+    <!-- 知识图谱禁用处理脚本 -->
+    <script>
+      // 检查是否访问知识图谱相关路径，如果是则重定向到禁用页面
+      window.addEventListener('DOMContentLoaded', function() {
+        const currentPath = window.location.pathname + window.location.hash;
+        if (currentPath.includes('/graph') || currentPath.includes('graph') || 
+            currentPath.includes('知识图谱') || currentPath.includes('knowledge')) {
+          window.location.href = './graph-disabled.html';
+        }
+      });
+      
+      // 监听路由变化
+      window.addEventListener('hashchange', function() {
+        const currentHash = window.location.hash;
+        if (currentHash.includes('graph') || currentHash.includes('Graph') || 
+            currentHash.includes('知识图谱') || currentHash.includes('knowledge')) {
+          window.location.href = './graph-disabled.html';
+        }
+      });
+    </script>
+    <link rel="modulepreload" crossorigin href="/webui/assets/feature-documents-36AWafKt.js">
+    <link rel="modulepreload" crossorigin href="/webui/assets/mermaid-vendor-DGPC_TDM.js">
+    <link rel="modulepreload" crossorigin href="/webui/assets/markdown-vendor-DmIvJdn7.js">
+    <link rel="modulepreload" crossorigin href="/webui/assets/feature-retrieval-Bsekt8JN.js">
+    <!-- <link rel="stylesheet" crossorigin href="/webui/assets/feature-graph-BipNuM18.css"> -->
+    <link rel="stylesheet" crossorigin href="/webui/assets/index-CafJWW1u.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

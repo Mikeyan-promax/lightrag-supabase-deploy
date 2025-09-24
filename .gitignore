@@ -1,0 +1,104 @@
+# Python-related files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+*.tgz
+*.tar.gz
+*.ini
+
+# Virtual Environment
+.venv/
+env/
+venv/
+lightrag_env/
+
+# Environment Files (包含敏感信息)
+.env
+.env.*
+*.env
+.env_*
+config.ini
+
+# Build / Distribution
+dist/
+build/
+site/
+
+# Logs / Reports
+*.log
+*.log.*
+*.logfire
+*.coverage/
+log/
+
+# Caches
+.cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.gradio/
+.history/
+temp/
+
+# IDE / Editor Files
+.idea/
+.vscode/
+.vscode/settings.json
+
+# Framework-specific files
+local_neo4jWorkDir/
+neo4jWorkDir/
+
+# Data & Storage (用户数据)
+inputs/
+rag_storage/
+examples/input/
+examples/output/
+output*/
+.lightrag_cache/
+ultimate_test_storage/
+test_upload_files/
+
+# 用户个人文件
+*.xlsx
+*.csv
+*.pdf
+*.docx
+*.txt
+*.json
+!README*.md
+!LICENSE
+!MANIFEST.in
+!pyproject.toml
+!setup.py
+
+# Miscellaneous
+.DS_Store
+TODO.md
+ignore_this.txt
+*.ignore.*
+
+# Project-specific files (原作者测试文件)
+dickens*/
+book.txt
+LightRAG.pdf
+download_models_hf.py
+lightrag-dev/
+gui/
+
+# Test files (测试文件)
+test_*
+*test*.py
+!test_lightrag.py
+check_*.py
+debug_*.py
+migrate_*.py
+optimize_*.py
+perfect_*.py
+stress_*.py
+ultimate_*.py
+comprehensive_*.py
+
+# Cline files
+memory-bank/

@@ -1,0 +1,993 @@
+# LightRAG Supabase 超详细部署指南（逐步操作）
+
+## 🎯 前置准备
+
+在开始之前，请准备：
+- 一个可用的邮箱（用于注册 Supabase）
+- LLM API Key（OpenAI、DeepSeek 或其他）
+- Embedding API Key（推荐 OpenAI 或 Doubao）
+- 部署环境（本地 Docker 或云服务器）
+
+---
+
+## 第一阶段：Supabase 项目创建（详细界面操作）
+
+### 步骤 1：访问 Supabase 官网并注册
+
+1. **打开浏览器**，访问：https://supabase.com
+2. **点击页面右上角的 "Start your project" 绿色按钮**
+3. **注册账户**：
+   - 选择注册方式：
+     - **GitHub**：点击 "Continue with GitHub"（推荐）
+     - **Google**：点击 "Continue with Google"  
+     - **邮箱**：点击 "Continue with email"
+   - 如果选择邮箱注册：
+     - 输入邮箱地址
+     - 输入密码（至少8位）
+     - 点击 "Sign up"
+     - **检查邮箱**，点击验证链接
+
+### 步骤 2：创建新项目
+
+1. **登录成功后**，你会看到 Dashboard 页面
+2. **点击绿色的 "New Project" 按钮**（位于页面中央或右上角）
+3. **选择组织**（如果是第一次使用，会自动创建个人组织）
+4. **填写项目信息**：
+
+   **项目基本信息**：
+   - **Name**：输入项目名称（例如：`lightrag-production`）
+   - **Database Password**：
+     - 点击🎲图标生成强密码，**或者**
+     - 手动输入密码（建议至少12位，包含大小写字母、数字、特殊字符）
+     - **📝 重要**：复制并保存这个密码到安全的地方！
+
+   **地区选择**：
+   - **Region**：选择离你最近的地区
+     - 亚洲用户推荐：**Singapore (Southeast Asia)** 或 **Tokyo (Northeast Asia)**
+     - 美洲用户推荐：**Oregon (US West)** 或 **Virginia (US East)**
+     - 欧洲用户推荐：**Ireland (West Europe)**
+
+   **定价计划**：
+   - 选择 **"Free Plan"**（足够开发和小规模使用）
+
+5. **点击绿色的 "Create new project" 按钮**
+6. **等待项目初始化**（约2-3分钟，页面会显示进度条）
+
+### 步骤 3：获取项目连接信息
+
+项目创建完成后，你会看到项目 Dashboard：
+
+1. **获取 API 信息**：
+   - 在左侧菜单栏，点击 **"Settings"**（设置图标 ⚙️）
+   - 点击 **"API"** 子菜单
+   - **记录以下信息**：
+     ```
+     Project URL: https://xxxxxxxxxxxxx.supabase.co
+     API Key (anon public): eyJ0eXAiOiJKV1QiLCJhbGciOi...
+     API Key (service_role): eyJ0eXAiOiJKV1QiLCJhbGciOi...（谨慎使用）
+     ```
+
+2. **获取数据库连接信息**：
+   - 在 Settings 页面，点击 **"Database"** 子菜单
+   - 在 **"Connection parameters"** 部分，记录：
+     ```
+     Host: db.xxxxxxxxxxxxx.supabase.co
+     Database name: postgres
+     Port: 5432
+     User: postgres
+     Password: [你在步骤2中设置的密码]
+     ```
+   - 在 **"Connection string"** 部分，你会看到三种连接方式：
+     - **URI**：复制 "URI" 标签下的连接字符串
+     - **Session pooler**：复制这个连接字符串（推荐用于持久连接）
+     - **Transaction pooler**：复制这个连接字符串（推荐用于 serverless）
+
+---
+
+## 第二阶段：数据库配置（SQL 操作）
+
+### 步骤 4：启用必要的 PostgreSQL 扩展
+
+1. **在左侧菜单中，点击 "SQL Editor"**（💻 图标）
+2. **点击 "New query" 或 "+ New query" 按钮**
+3. **在 SQL 编辑器中输入以下代码**：
+
+```sql
+-- 启用向量扩展（必需用于 LightRAG 的向量存储）
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 启用 UUID 扩展（用于生成唯一标识符）
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 启用全文搜索扩展（用于文本搜索优化）
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- 启用 jsonb 函数扩展（用于 JSON 数据处理）
+CREATE EXTENSION IF NOT EXISTS btree_gin;
+
+-- 验证扩展安装成功
+SELECT 
+    name,
+    default_version,
+    installed_version 
+FROM pg_available_extensions 
+WHERE name IN ('vector', 'uuid-ossp', 'pg_trgm', 'btree_gin')
+ORDER BY name;
+```
+
+4. **点击绿色的 "RUN" 按钮**（或按 `Ctrl/Cmd + Enter`）
+5. **检查执行结果**：
+   - 应该显示 "Success. No rows returned" 对于前4个命令
+   - 最后一个查询应该返回4行数据，确认扩展已安装
+
+### 步骤 5：配置数据库安全策略（可选但推荐）
+
+1. **在 SQL Editor 中执行以下命令**：
+
+```sql
+-- 创建 LightRAG 专用 schema（可选，用于组织表结构）
+CREATE SCHEMA IF NOT EXISTS lightrag;
+
+-- 设置默认权限
+ALTER DEFAULT PRIVILEGES IN SCHEMA lightrag GRANT ALL ON TABLES TO postgres;
+ALTER DEFAULT PRIVILEGES IN SCHEMA lightrag GRANT ALL ON SEQUENCES TO postgres;
+```
+
+2. **点击 "RUN" 执行**
+
+---
+
+## 第三阶段：LightRAG 项目配置
+
+### 步骤 6：准备本地项目环境
+
+1. **在你的开发机器上创建项目目录**：
+```bash
+mkdir lightrag-supabase
+cd lightrag-supabase
+```
+
+2. **克隆 LightRAG 项目**：
+```bash
+git clone https://github.com/HKUDS/LightRAG.git .
+```
+
+3. **创建必要的目录**：
+```bash
+mkdir -p inputs rag_storage logs backups
+```
+
+### 步骤 7：配置环境变量文件
+
+创建 `.env` 文件（**完整配置版本**）：
+
+```bash
+cat > .env << 'EOF'
+###########################
+### 🔧 基本服务配置
+###########################
+HOST=0.0.0.0
+PORT=9621
+WEBUI_TITLE='LightRAG Knowledge Base'
+WEBUI_DESCRIPTION='Graph-based RAG System powered by Supabase'
+
+###########################
+### 🔐 认证和安全配置
+###########################
+# 用户认证（格式：username:password，多用户用逗号分隔）
+AUTH_ACCOUNTS='admin:LightRAG@2025!,user:UserPass123!'
+
+# JWT 配置
+TOKEN_SECRET=your-jwt-secret-key-must-be-at-least-32-characters-long
+TOKEN_EXPIRE_HOURS=72
+GUEST_TOKEN_EXPIRE_HOURS=24
+JWT_ALGORITHM=HS256
+
+###########################
+### 🤖 LLM 配置
+###########################
+LLM_BIND_TYPE=openai
+LLM_MODEL=gpt-3.5-turbo
+# 如果使用 OpenAI
+LLM_BINDING_HOST=https://api.openai.com/v1
+LLM_API_KEY=sk-your-openai-api-key-here
+OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# 如果使用 DeepSeek（更便宜的选择）
+# LLM_MODEL=deepseek-chat
+# LLM_BINDING_HOST=https://api.deepseek.com/v1
+# LLM_API_KEY=sk-your-deepseek-api-key-here
+
+###########################
+### 📊 Embedding 配置
+###########################
+EMBEDDING_BINDING=openai
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIM=1536
+# 如果使用 OpenAI embedding
+EMBEDDING_BINDING_HOST=https://api.openai.com/v1
+EMBEDDING_BINDING_API_KEY=sk-your-openai-api-key-here
+
+# 如果使用 Doubao embedding（国内推荐）
+# EMBEDDING_MODEL=doubao-embedding-text-240715
+# EMBEDDING_DIM=2560
+# EMBEDDING_BINDING_HOST=https://ark.cn-beijing.volces.com/api/v3
+# EMBEDDING_BINDING_API_KEY=your-doubao-api-key-here
+
+###########################
+### 🗄️ Supabase 存储配置
+###########################
+LIGHTRAG_KV_STORAGE=PGKVStorage
+LIGHTRAG_DOC_STATUS_STORAGE=PGDocStatusStorage
+LIGHTRAG_VECTOR_STORAGE=PGVectorStorage
+LIGHTRAG_GRAPH_STORAGE=PGGraphStorage
+
+###########################
+### 🐘 PostgreSQL 配置（从 Supabase 获取）
+###########################
+# 替换为你的 Supabase 项目信息
+POSTGRES_HOST=db.xxxxxxxxxxxxx.supabase.co
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your-supabase-db-password
+POSTGRES_DATABASE=postgres
+POSTGRES_MAX_CONNECTIONS=10
+
+# SSL 配置（Supabase 必需）
+POSTGRES_SSL_MODE=require
+
+###########################
+### ⚙️ 应用优化配置
+###########################
+# 调试和日志
+DEBUG=false
+LOG_LEVEL=INFO
+
+# 文件上传限制（MB）
+MAX_FILE_SIZE=50
+
+# 查询配置
+MAX_QUERY_LENGTH=2000
+MAX_RESULTS=50
+
+# 性能配置
+VECTOR_INDEX_TYPE=ivfflat
+VECTOR_INDEX_LISTS=100
+
+###########################
+### 🌐 网络和安全配置
+###########################
+# CORS 配置（如果需要跨域）
+# CORS_ORIGINS=https://your-frontend-domain.com,http://localhost:3000
+
+# SSL 配置（生产环境）
+# SSL=true
+# SSL_CERTFILE=/path/to/cert.pem
+# SSL_KEYFILE=/path/to/key.pem
+EOF
+```
+
+**🚨 重要**：请替换以下占位符为实际值：
+- `xxxxxxxxxxxxx`：你的 Supabase 项目 ID
+- `your-supabase-db-password`：你在创建项目时设置的数据库密码
+- `sk-your-openai-api-key-here`：你的 OpenAI API Key
+- `your-jwt-secret-key...`：生成一个至少32位的随机字符串
+
+### 步骤 8：创建 Docker 配置文件
+
+1. **创建 `docker-compose.yml` 文件**：
+
+```yaml
+version: '3.8'
+
+services:
+  lightrag:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: lightrag-supabase
+    ports:
+      - "9621:9621"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=9621
+    env_file:
+      - .env
+    volumes:
+      # 输入文件目录
+      - ./inputs:/app/inputs:rw
+      # 存储目录（备用，主要使用 Supabase）
+      - ./rag_storage:/app/rag_storage:rw
+      # 日志目录
+      - ./logs:/app/logs:rw
+      # 备份目录
+      - ./backups:/app/backups:rw
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9621/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    networks:
+      - lightrag-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  lightrag-network:
+    driver: bridge
+```
+
+2. **如果项目中没有 Dockerfile，创建一个**：
+
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制需求文件
+COPY requirements.txt .
+
+# 安装 Python 依赖
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# 复制应用代码
+COPY . .
+
+# 创建必要目录
+RUN mkdir -p inputs rag_storage logs backups
+
+# 设置权限
+RUN chmod +x /app/lightrag/server.py 2>/dev/null || true
+
+# 暴露端口
+EXPOSE 9621
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:9621/health || exit 1
+
+# 启动命令
+CMD ["python", "-m", "lightrag.server"]
+```
+
+---
+
+## 第四阶段：部署前测试
+
+### 步骤 9：测试数据库连接
+
+1. **创建连接测试脚本**：
+
+```bash
+cat > test_connection.py << 'EOF'
+import os
+import psycopg2
+import sys
+from dotenv import load_dotenv
+
+def test_database_connection():
+    # 加载环境变量
+    load_dotenv()
+    
+    # 获取连接参数
+    host = os.getenv('POSTGRES_HOST')
+    port = os.getenv('POSTGRES_PORT', 5432)
+    user = os.getenv('POSTGRES_USER')
+    password = os.getenv('POSTGRES_PASSWORD')
+    database = os.getenv('POSTGRES_DATABASE')
+    ssl_mode = os.getenv('POSTGRES_SSL_MODE', 'require')
+    
+    print("🔍 测试数据库连接...")
+    print(f"Host: {host}")
+    print(f"Port: {port}")
+    print(f"User: {user}")
+    print(f"Database: {database}")
+    print(f"SSL Mode: {ssl_mode}")
+    print("-" * 50)
+    
+    try:
+        # 尝试连接数据库
+        conn = psycopg2.connect(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            sslmode=ssl_mode
+        )
+        
+        # 测试基本查询
+        cur = conn.cursor()
+        cur.execute("SELECT version();")
+        version = cur.fetchone()[0]
+        print(f"✅ 数据库连接成功!")
+        print(f"PostgreSQL 版本: {version}")
+        
+        # 测试扩展
+        cur.execute("""
+            SELECT name, default_version, installed_version 
+            FROM pg_available_extensions 
+            WHERE name IN ('vector', 'uuid-ossp', 'pg_trgm')
+            AND installed_version IS NOT NULL
+            ORDER BY name;
+        """)
+        extensions = cur.fetchall()
+        
+        print(f"\n✅ 已安装的扩展:")
+        for ext in extensions:
+            print(f"  - {ext[0]}: {ext[2]}")
+        
+        # 清理
+        cur.close()
+        conn.close()
+        print(f"\n🎉 数据库连接测试完成!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 数据库连接失败: {e}")
+        print("\n🔧 请检查:")
+        print("1. Supabase 项目是否正常运行")
+        print("2. 数据库密码是否正确")
+        print("3. 网络连接是否正常")
+        print("4. .env 文件配置是否正确")
+        return False
+
+if __name__ == "__main__":
+    success = test_database_connection()
+    sys.exit(0 if success else 1)
+EOF
+```
+
+2. **运行连接测试**：
+```bash
+# 安装依赖
+pip install psycopg2-binary python-dotenv
+
+# 运行测试
+python test_connection.py
+```
+
+### 步骤 10：测试 API Keys
+
+1. **创建 API 测试脚本**：
+
+```bash
+cat > test_apis.py << 'EOF'
+import os
+import openai
+from dotenv import load_dotenv
+
+def test_openai_api():
+    load_dotenv()
+    
+    api_key = os.getenv('OPENAI_API_KEY') or os.getenv('LLM_API_KEY')
+    if not api_key:
+        print("❌ 未找到 OpenAI API Key")
+        return False
+        
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Hello, this is a test."}],
+            max_tokens=10
+        )
+        print("✅ OpenAI API 连接成功!")
+        return True
+    except Exception as e:
+        print(f"❌ OpenAI API 测试失败: {e}")
+        return False
+
+def test_embedding_api():
+    load_dotenv()
+    
+    api_key = os.getenv('EMBEDDING_BINDING_API_KEY') or os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        print("❌ 未找到 Embedding API Key")
+        return False
+        
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input="This is a test"
+        )
+        print("✅ Embedding API 连接成功!")
+        return True
+    except Exception as e:
+        print(f"❌ Embedding API 测试失败: {e}")
+        return False
+
+if __name__ == "__main__":
+    print("🔍 测试 API 连接...")
+    print("-" * 50)
+    
+    llm_ok = test_openai_api()
+    embedding_ok = test_embedding_api()
+    
+    if llm_ok and embedding_ok:
+        print("\n🎉 所有 API 测试通过!")
+    else:
+        print("\n⚠️  部分 API 测试失败，请检查 API Keys")
+EOF
+```
+
+2. **运行 API 测试**：
+```bash
+pip install openai
+python test_apis.py
+```
+
+---
+
+## 第五阶段：部署启动
+
+### 步骤 11：启动 LightRAG 服务
+
+1. **构建和启动服务**：
+```bash
+# 构建并启动服务
+docker-compose up --build -d
+
+# 查看服务状态
+docker-compose ps
+```
+
+2. **查看启动日志**：
+```bash
+# 实时查看日志
+docker-compose logs -f lightrag
+
+# 查看最近的日志
+docker-compose logs --tail=100 lightrag
+```
+
+3. **等待服务完全启动**（通常需要1-2分钟）
+
+### 步骤 12：验证部署成功
+
+1. **健康检查**：
+```bash
+curl http://localhost:9621/health
+# 预期响应：{"status":"healthy","timestamp":"2025-XX-XX XX:XX:XX"}
+```
+
+2. **检查服务状态**：
+```bash
+# 检查容器状态
+docker-compose ps
+
+# 检查端口监听
+netstat -tlnp | grep 9621
+# 或者
+lsof -i :9621
+```
+
+3. **访问 Web 界面**：
+   - 打开浏览器，访问：http://localhost:9621
+   - 应该看到 LightRAG 的登录界面
+
+---
+
+## 第六阶段：功能验证测试
+
+### 步骤 13：登录和基本功能测试
+
+1. **Web 界面登录**：
+   - 访问：http://localhost:9621
+   - 使用在 .env 文件中配置的用户名密码登录：
+     - 用户名：`admin`
+     - 密码：`LightRAG@2025!`
+
+2. **API 登录测试**：
+```bash
+# 获取访问令牌
+curl -X POST http://localhost:9621/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "LightRAG@2025!"}'
+
+# 保存返回的 token，格式类似：
+# {"access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOi...", "token_type": "bearer"}
+```
+
+### 步骤 14：文档上传测试
+
+1. **创建测试文档**：
+```bash
+cat > ./inputs/test_document.txt << 'EOF'
+# LightRAG 测试文档
+
+这是一个测试文档，用于验证 LightRAG 系统的功能。
+
+## 人工智能简介
+
+人工智能（AI）是一种模拟人类智能的技术，包括：
+- 机器学习
+- 深度学习
+- 自然语言处理
+- 计算机视觉
+
+## 知识图谱
+
+知识图谱是一种结构化的知识表示方法，通过实体、属性和关系来描述现实世界的概念及其相互关系。
+
+## LightRAG 特点
+
+LightRAG 是一个基于图的检索增强生成系统，具有以下特点：
+1. 快速索引构建
+2. 高效的向量检索
+3. 智能的知识图谱构建
+4. 支持多种数据源
+EOF
+```
+
+2. **通过 API 上传文档**：
+```bash
+# 使用之前获取的 token
+TOKEN="your-access-token-here"
+
+curl -X POST http://localhost:9621/api/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@./inputs/test_document.txt"
+
+# 预期响应：
+# {"message": "文档上传成功", "filename": "test_document.txt", "status": "processing"}
+```
+
+### 步骤 15：查询功能测试
+
+1. **等待文档处理完成**（通常需要几分钟）：
+```bash
+# 检查处理日志
+docker-compose logs lightrag | grep -i "processing\|complete\|error"
+```
+
+2. **测试查询功能**：
+```bash
+# 测试混合查询
+curl -X POST http://localhost:9621/api/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "query": "什么是人工智能？",
+    "mode": "hybrid",
+    "stream": false
+  }'
+
+# 测试向量查询
+curl -X POST http://localhost:9621/api/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "query": "LightRAG 有哪些特点？",
+    "mode": "vector",
+    "stream": false
+  }'
+
+# 测试知识图谱查询
+curl -X POST http://localhost:9621/api/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "query": "知识图谱和人工智能的关系",
+    "mode": "graph",
+    "stream": false
+  }'
+```
+
+### 步骤 16：数据库数据验证
+
+1. **在 Supabase Dashboard 中查看数据**：
+   - 登录你的 Supabase 项目
+   - 点击左侧菜单的 **"Table Editor"** 
+   - 你应该看到 LightRAG 创建的表：
+     - `lightrag_kv_storage`
+     - `lightrag_documents`  
+     - `lightrag_vectors`
+     - `lightrag_graph_edges`（如果使用图存储）
+
+2. **在 SQL Editor 中验证数据**：
+```sql
+-- 检查文档数量
+SELECT COUNT(*) as document_count FROM lightrag_documents;
+
+-- 检查向量数据
+SELECT COUNT(*) as vector_count FROM lightrag_vectors;
+
+-- 检查键值存储
+SELECT COUNT(*) as kv_count FROM lightrag_kv_storage;
+
+-- 查看最近的文档
+SELECT filename, status, created_at 
+FROM lightrag_documents 
+ORDER BY created_at DESC 
+LIMIT 5;
+```
+
+---
+
+## 第七阶段：生产环境优化
+
+### 步骤 17：性能优化配置
+
+1. **在 Supabase SQL Editor 中创建索引**：
+```sql
+-- 为向量查询创建索引
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_vectors_embedding_cosine 
+ON lightrag_vectors USING ivfflat (embedding vector_cosine_ops) 
+WITH (lists = 100);
+
+-- 为文档文本搜索创建索引
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_documents_content_gin 
+ON lightrag_documents USING gin (content gin_trgm_ops);
+
+-- 为文档状态查询创建索引
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_documents_status 
+ON lightrag_documents (status);
+
+-- 为时间查询创建索引
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_documents_created_at 
+ON lightrag_documents (created_at DESC);
+```
+
+### 步骤 18：监控和日志配置
+
+1. **设置日志轮转**：
+```bash
+cat > logrotate.conf << 'EOF'
+./logs/*.log {
+    daily
+    missingok
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 644 root root
+}
+EOF
+```
+
+2. **创建监控脚本**：
+```bash
+cat > monitor.sh << 'EOF'
+#!/bin/bash
+
+echo "🔍 LightRAG 服务监控报告"
+echo "时间: $(date)"
+echo "================================"
+
+# 检查容器状态
+echo "📦 容器状态:"
+docker-compose ps
+
+# 检查内存使用
+echo -e "\n💾 内存使用:"
+docker stats --no-stream lightrag-supabase
+
+# 检查磁盘使用
+echo -e "\n💽 磁盘使用:"
+df -h ./
+
+# 检查服务健康
+echo -e "\n🏥 服务健康检查:"
+curl -s http://localhost:9621/health || echo "❌ 健康检查失败"
+
+# 检查数据库连接
+echo -e "\n🗄️ 数据库状态:"
+python test_connection.py
+
+echo -e "\n================================"
+echo "监控报告完成"
+EOF
+
+chmod +x monitor.sh
+```
+
+### 步骤 19：备份配置
+
+1. **创建自动备份脚本**：
+```bash
+cat > backup.sh << 'EOF'
+#!/bin/bash
+
+# 配置
+BACKUP_DIR="./backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+DB_BACKUP="$BACKUP_DIR/lightrag_db_$DATE.sql"
+CONFIG_BACKUP="$BACKUP_DIR/lightrag_config_$DATE.tar.gz"
+
+# 创建备份目录
+mkdir -p $BACKUP_DIR
+
+echo "🔄 开始备份 LightRAG 数据..."
+
+# 备份数据库
+echo "📊 备份数据库..."
+PGPASSWORD=$POSTGRES_PASSWORD pg_dump \
+  -h $POSTGRES_HOST \
+  -p $POSTGRES_PORT \
+  -U $POSTGRES_USER \
+  -d $POSTGRES_DATABASE \
+  --no-password \
+  > $DB_BACKUP
+
+if [ $? -eq 0 ]; then
+    echo "✅ 数据库备份成功: $DB_BACKUP"
+    gzip $DB_BACKUP
+else
+    echo "❌ 数据库备份失败"
+fi
+
+# 备份配置文件
+echo "📁 备份配置文件..."
+tar -czf $CONFIG_BACKUP .env docker-compose.yml Dockerfile
+
+if [ $? -eq 0 ]; then
+    echo "✅ 配置备份成功: $CONFIG_BACKUP"
+else
+    echo "❌ 配置备份失败"
+fi
+
+# 清理旧备份（保留30天）
+echo "🧹 清理旧备份文件..."
+find $BACKUP_DIR -name "*.sql.gz" -mtime +30 -delete
+find $BACKUP_DIR -name "*.tar.gz" -mtime +30 -delete
+
+echo "🎉 备份完成!"
+EOF
+
+chmod +x backup.sh
+```
+
+2. **设置定期备份**：
+```bash
+# 添加到 crontab（每天凌晨2点备份）
+echo "0 2 * * * /path/to/your/project/backup.sh" | crontab -
+```
+
+---
+
+## 第八阶段：故障排除指南
+
+### 常见问题诊断清单
+
+当遇到问题时，请按以下顺序检查：
+
+1. **🔍 服务状态检查**：
+```bash
+docker-compose ps
+docker-compose logs --tail=50 lightrag
+```
+
+2. **🌐 网络连接检查**：
+```bash
+# 检查 Supabase 连接
+ping db.xxxxxxxxxxxxx.supabase.co
+telnet db.xxxxxxxxxxxxx.supabase.co 5432
+```
+
+3. **🗄️ 数据库连接检查**：
+```bash
+python test_connection.py
+```
+
+4. **🔑 API 密钥检查**：
+```bash
+python test_apis.py
+```
+
+5. **📊 资源使用检查**：
+```bash
+docker stats
+df -h
+free -h
+```
+
+### 具体错误解决方案
+
+#### 错误1：`could not connect to server: Connection refused`
+
+**原因**：无法连接到 Supabase 数据库
+
+**解决步骤**：
+1. 检查 Supabase 项目状态（在 Dashboard 中确认项目运行正常）
+2. 验证连接字符串中的主机名和端口
+3. 检查网络防火墙设置
+4. 确认 SSL 模式设置正确
+
+#### 错误2：`password authentication failed`
+
+**原因**：数据库密码错误
+
+**解决步骤**：
+1. 在 Supabase Dashboard → Settings → Database 中重置密码
+2. 更新 `.env` 文件中的 `POSTGRES_PASSWORD`
+3. 重启服务：`docker-compose restart`
+
+#### 错误3：`extension "vector" does not exist`
+
+**原因**：向量扩展未安装
+
+**解决步骤**：
+1. 在 Supabase SQL Editor 中执行：`CREATE EXTENSION vector;`
+2. 确认扩展安装成功：`SELECT * FROM pg_extension WHERE extname = 'vector';`
+
+#### 错误4：`API key invalid`
+
+**原因**：LLM 或 Embedding API 密钥无效
+
+**解决步骤**：
+1. 检查 API 密钥格式和有效性
+2. 确认 API 配额未超限
+3. 验证 API 端点 URL 正确
+
+#### 错误5：内存不足
+
+**原因**：Docker 容器内存限制过低
+
+**解决步骤**：
+1. 增加 Docker 内存限制（在 docker-compose.yml 中调整）
+2. 减少并发处理的文档数量
+3. 优化 embedding 模型选择
+
+---
+
+## 🎉 部署完成验证
+
+当你完成以上所有步骤后，你应该：
+
+✅ **Supabase 项目运行正常**
+✅ **数据库扩展已安装**
+✅ **LightRAG 服务启动成功**
+✅ **Web 界面可以访问**
+✅ **文档上传功能正常**
+✅ **查询功能返回结果**
+✅ **数据存储在 Supabase 中**
+
+### 最终测试命令
+
+```bash
+# 完整功能测试
+./monitor.sh
+
+# 或者单独验证各项功能
+curl http://localhost:9621/health
+python test_connection.py
+python test_apis.py
+```
+
+如果所有测试都通过，恭喜你！LightRAG 已成功部署到 Supabase。
+
+---
+
+## 📞 获取帮助
+
+如果在部署过程中遇到问题：
+
+1. **查看日志**：`docker-compose logs lightrag`
+2. **检查 Supabase 状态**：访问 Supabase Dashboard
+3. **运行诊断脚本**：使用本指南提供的测试脚本
+4. **提供错误信息**：包含具体的错误日志和环境信息
+
+这个部署指南涵盖了从零开始到完全运行的每一个详细步骤。每个界面操作都有明确的指示，每个配置都有完整的示例。按照这个指南操作，你应该能够成功部署 LightRAG 到 Supabase。
