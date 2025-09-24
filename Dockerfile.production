@@ -1,0 +1,76 @@
+# 生产环境 Dockerfile for LightRAG Supabase 部署
+# Build stage
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# 安装构建依赖
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . $HOME/.cargo/env
+
+# 复制项目文件
+COPY pyproject.toml .
+COPY setup.py .
+COPY lightrag/ ./lightrag/
+COPY requirements.txt .
+
+# 安装Python依赖
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN pip install --user --no-cache-dir .
+RUN pip install --user --no-cache-dir .[api]
+
+# 安装额外依赖
+RUN pip install --user --no-cache-dir nano-vectordb networkx
+RUN pip install --user --no-cache-dir openai ollama tiktoken
+RUN pip install --user --no-cache-dir pypdf2 python-docx python-pptx openpyxl
+RUN pip install --user --no-cache-dir supabase redis fastapi uvicorn gunicorn
+
+# Final stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制构建阶段的文件
+COPY --from=builder /root/.local /root/.local
+COPY ./lightrag ./lightrag
+COPY setup.py .
+COPY requirements.txt .
+
+# 安装项目
+RUN pip install ".[api]"
+
+# 设置环境变量
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV WORKING_DIR=/app/rag_storage
+ENV INPUT_DIR=/app/inputs
+
+# 创建必要的目录
+RUN mkdir -p /app/rag_storage /app/inputs /app/logs /app/examples/input /app/examples/output
+
+# 创建非root用户（可选，提高安全性）
+RUN useradd --create-home --shell /bin/bash lightrag && \
+    chown -R lightrag:lightrag /app
+USER lightrag
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 暴露端口
+EXPOSE 8000
+
+# 启动命令 - 使用 gunicorn 提供更好的生产环境性能
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "120", "--keep-alive", "2", "lightrag.api.lightrag_server:app"]
