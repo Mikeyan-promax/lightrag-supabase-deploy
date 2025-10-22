@@ -93,6 +93,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Railway会自动分配端口，使用PORT环境变量
 EXPOSE ${PORT:-9621}
 
-# 启动命令 - 使用gunicorn提供更好的生产环境性能
+# 启动命令 - 使用我们的启动脚本确保环境变量正确设置
 # Railway会自动设置PORT环境变量
-CMD ["sh", "-c", "gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-9621} --timeout 120 --keep-alive 2 lightrag.api.lightrag_server:app"]
+CMD ["python", "start.py"]
