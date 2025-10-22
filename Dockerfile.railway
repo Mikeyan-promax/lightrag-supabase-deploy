@@ -57,6 +57,15 @@ COPY ./lightrag ./lightrag
 COPY setup.py .
 COPY pyproject.toml .
 
+# Railway部署专用：将.env.railway复制为.env文件
+# 这样LightRAG就能正确加载Railway环境变量配置
+RUN if [ -f ".env.railway" ]; then \
+        echo "发现.env.railway文件，复制为.env"; \
+        cp .env.railway .env; \
+    else \
+        echo "警告：未找到.env.railway文件"; \
+    fi
+
 # 重新安装项目（确保入口点正确配置）
 RUN pip install ".[api]"
 
