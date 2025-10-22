@@ -157,18 +157,28 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA lightrag GRANT ALL ON SEQUENCES TO postgres;
 
 ## 第三阶段：LightRAG 项目配置
 
-### 步骤 6：准备本地项目环境
+### 步骤 6：获取项目代码
 
-1. **进入您的 LightRAG 项目目录**：
+1. **克隆 GitHub 仓库**：
 ```bash
-cd /d/2/LightRAG-1.4.6/LightRAG-1.4.6
+# 克隆项目到本地
+git clone https://github.com/Mikeyan-promax/lightrag-supabase-deploy.git
+cd lightrag-supabase-deploy
 ```
 
 2. **确认项目结构**：
 ```bash
 # 检查项目文件是否存在
 ls -la
-# 应该看到：lightrag/ 目录、env.example 文件、docker-compose.yml 等
+# 应该看到以下重要文件：
+# - lightrag/                    # 核心代码目录
+# - env.example                  # 环境变量示例文件
+# - docker-compose.yml           # Docker 编排配置（包含生产环境配置）
+# - Dockerfile.production        # 生产环境 Docker 镜像
+# - deploy.sh                    # 自动化部署脚本
+# - backup.sh                    # 数据备份脚本
+# - nginx.conf                   # Nginx 反向代理配置
+# - deploy_server.md             # 云服务器部署指南
 ```
 
 3. **创建必要的目录（如果不存在）**：
@@ -178,147 +188,163 @@ mkdir -p inputs rag_storage logs backups
 
 ### 步骤 7：配置环境变量文件
 
-基于您项目中的 `env.example` 文件，创建 `.env` 文件（**完整配置版本**）：
+项目已经提供了完整的环境变量示例文件 `env.example`，包含了所有必要的配置项：
 
+1. **复制环境变量模板**：
 ```bash
-# 复制示例配置文件
+# 复制环境变量模板
 cp env.example .env
 ```
 
-然后编辑 `.env` 文件，重点配置以下 Supabase 相关部分：
-
+2. **编辑环境变量文件**：
 ```bash
-###########################
-### 🔧 基本服务配置
-###########################
+# 使用你喜欢的编辑器编辑 .env 文件
+nano .env
+# 或者
+vim .env
+```
+
+3. **必须配置的核心变量**：
+
+**Supabase 数据库配置**：
+```env
+# 从 Supabase 项目设置中获取这些值
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+DATABASE_URL=postgresql://postgres:your_password@db.your-project-id.supabase.co:5432/postgres
+```
+
+**AI 模型配置**：
+```env
+# OpenAI 配置
+OPENAI_API_KEY=sk-your_openai_api_key_here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+
+# 嵌入模型配置
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIM=1536
+```
+
+**服务器配置**：
+```env
 HOST=0.0.0.0
-PORT=9621
-WEBUI_TITLE='LightRAG Knowledge Base'
-WEBUI_DESCRIPTION='Graph-based RAG System powered by Supabase'
+PORT=8000
+WEBUI_TITLE='LightRAG Supabase KB'
+WEBUI_DESCRIPTION="Supabase-powered Graph Based RAG System"
+WORKERS=4
+CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+```
 
-###########################
-### 🔐 认证和安全配置
-###########################
-# 用户认证（格式：username:password，多用户用逗号分隔）
-AUTH_ACCOUNTS='admin:LightRAG@2025!,user:UserPass123!'
+**安全配置**：
+```env
+# 生成随机密钥: openssl rand -hex 32
+SECRET_KEY=your_secret_key_here_32_characters_long
+ALLOWED_HOSTS=localhost,127.0.0.1,your-domain.com
+```
 
-# JWT 配置
-TOKEN_SECRET=your-jwt-secret-key-must-be-at-least-32-characters-long
-TOKEN_EXPIRE_HOURS=72
-GUEST_TOKEN_EXPIRE_HOURS=24
-JWT_ALGORITHM=HS256
-
-###########################
-### 🤖 LLM 配置（根据您的实际配置）
-###########################
-LLM_BIND_TYPE=openai
-# 如果使用 DeepSeek（如您的配置）
-LLM_MODEL=deepseek-chat
-LLM_BINDING_HOST=https://api.deepseek.com/v1
-LLM_API_KEY=sk-your-deepseek-api-key-here
-
-# 或者使用 OpenAI
-# LLM_MODEL=gpt-3.5-turbo
-# LLM_BINDING_HOST=https://api.openai.com/v1
-# LLM_API_KEY=sk-your-openai-api-key-here
-
-###########################
-### 📊 Embedding 配置（根据您的实际配置）
-###########################
-EMBEDDING_BINDING=openai
-# 如果使用 Doubao embedding（如您的配置）
-EMBEDDING_MODEL=doubao-embedding-text-240715
-EMBEDDING_DIM=2560
-EMBEDDING_BINDING_HOST=https://ark.cn-beijing.volces.com/api/v3
-EMBEDDING_BINDING_API_KEY=your-doubao-api-key-here
-
-# 或者使用 OpenAI embedding
-# EMBEDDING_MODEL=text-embedding-3-small
-# EMBEDDING_DIM=1536
-# EMBEDDING_BINDING_HOST=https://api.openai.com/v1
-# EMBEDDING_BINDING_API_KEY=sk-your-openai-api-key-here
-
-###########################
-### 🗄️ Supabase 存储配置
-###########################
-# 启用 PostgreSQL 作为主要存储
+**存储配置（推荐使用 PostgreSQL 一体式配置）**：
+```env
+# PostgreSQL 存储配置 (默认推荐配置，一体式数据库)
 LIGHTRAG_KV_STORAGE=PGKVStorage
 LIGHTRAG_DOC_STATUS_STORAGE=PGDocStatusStorage
 LIGHTRAG_VECTOR_STORAGE=PGVectorStorage
-LIGHTRAG_GRAPH_STORAGE=PGGraphStorage
 
-###########################
-### 🐘 PostgreSQL 配置（从 Supabase 获取）
-###########################
-# 替换为您的 Supabase 项目信息
-POSTGRES_HOST=db.xxxxxxxxxxxxx.supabase.co
+# PostgreSQL 连接配置
+POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your-supabase-db-password
-POSTGRES_DATABASE=postgres
-POSTGRES_MAX_CONNECTIONS=10
-
-# SSL 配置（Supabase 必需）
-POSTGRES_SSL_MODE=require
-
-###########################
-### ⚙️ 应用优化配置
-###########################
-# 调试和日志
-DEBUG=false
-LOG_LEVEL=INFO
-
-# 文件上传限制（MB）
-MAX_FILE_SIZE=50
-
-# 查询配置
-MAX_QUERY_LENGTH=2000
-MAX_RESULTS=50
-TOP_K=60
-MAX_ENTITY_TOKENS=32000
-MAX_TOTAL_TOKENS=32000
-
-# 性能配置
-VECTOR_INDEX_TYPE=ivfflat
-VECTOR_INDEX_LISTS=100
-MAX_ASYNC=4
-EMBEDDING_FUNC_MAX_ASYNC=16
+POSTGRES_USER=your_username
+POSTGRES_PASSWORD='your_password'
+POSTGRES_DATABASE=your_database
+POSTGRES_MAX_CONNECTIONS=12
 ```
 
-**🚨 重要**：请替换以下占位符为实际值：
-- `xxxxxxxxxxxxx`：您的 Supabase 项目 ID
-- `your-supabase-db-password`：您在创建项目时设置的数据库密码
-- `sk-your-deepseek-api-key-here`：您的 DeepSeek API Key
-- `your-doubao-api-key-here`：您的豆包 API Key
-- `your-jwt-secret-key...`：生成一个至少32位的随机字符串
+4. **可选配置项**：
+
+**Redis 配置**（用于缓存）：
+```env
+REDIS_URL=redis://redis:6379/0
+REDIS_PASSWORD=
+REDIS_DB=0
+```
+
+**文件上传配置**：
+```env
+MAX_FILE_SIZE=100
+ALLOWED_FILE_TYPES=.txt,.pdf,.docx,.md,.json
+```
+
+**查询优化配置**：
+```env
+ENABLE_LLM_CACHE=true
+TOP_K=40
+CHUNK_TOP_K=10
+MAX_ENTITY_TOKENS=10000
+MAX_RELATION_TOKENS=10000
+MAX_TOTAL_TOKENS=30000
+```
+
+**并发配置**：
+```env
+MAX_ASYNC=4
+MAX_PARALLEL_INSERT=2
+EMBEDDING_FUNC_MAX_ASYNC=8
+EMBEDDING_BATCH_NUM=10
+```
+
+5. **环境变量配置说明**：
+   - 所有以 `#` 开头的行都是注释，可以根据需要取消注释并配置
+   - `env.example` 文件包含了超过 300 行的详细配置选项
+   - 大部分配置项都有默认值，只需要配置核心的数据库和 API 密钥
+   - 生产环境建议启用所有安全相关配置
 
 ### 步骤 8：使用项目现有的 Docker 配置
 
-您的项目已经包含了 `docker-compose.yml` 文件，我们只需要确保它适用于 Supabase 部署：
+项目已经包含了完整的 Docker 配置文件，支持开发和生产环境：
 
-1. **检查现有的 Docker 配置**：
+1. **查看现有的 Docker 配置**：
 ```bash
-# 查看现有的 docker-compose.yml
+# 查看 docker-compose.yml（包含开发和生产环境配置）
 cat docker-compose.yml
+
+# 查看生产环境专用 Dockerfile
+cat Dockerfile.production
 ```
 
-2. **如果需要，可以创建专门用于 Supabase 的 docker-compose 配置**：
-```bash
-# 创建 Supabase 专用配置（可选）
-cp docker-compose.yml docker-compose.supabase.yml
-```
+2. **Docker 配置说明**：
+   - **`docker-compose.yml`**：包含完整的服务编排配置
+     - 开发环境服务（使用 `dev` profile）
+     - 生产环境服务（默认 profile，包含 Redis、Nginx 等）
+     - 资源限制、健康检查、日志配置等
+   
+   - **`Dockerfile.production`**：生产环境优化的镜像构建文件
+     - 多阶段构建，减小镜像体积
+     - 非 root 用户运行，提高安全性
+     - 使用 gunicorn 作为 WSGI 服务器
+     - 内置健康检查机制
 
-3. **确认 Dockerfile 存在**：
-```bash
-# 检查 Dockerfile
-ls -la Dockerfile
-```
+3. **选择部署模式**：
 
-如果您的项目中的 Docker 配置需要调整以适配 Supabase，主要关注以下几点：
+   **开发环境部署**：
+   ```bash
+   # 启动开发环境（包含开发工具和调试功能）
+   docker-compose --profile dev up --build -d
+   ```
 
-- 确保环境变量正确传递
-- 确保端口映射正确（默认 9621）
-- 确保挂载的目录存在
+   **生产环境部署**：
+   ```bash
+   # 启动生产环境（优化性能和安全性）
+   docker-compose up --build -d
+   ```
+
+4. **生产环境特性**：
+   - Redis 缓存服务
+   - Nginx 反向代理（可选）
+   - 资源限制和监控
+   - 自动重启策略
+   - 日志轮转配置
+   - 健康检查机制
 
 ---
 
@@ -490,14 +516,42 @@ python test_apis.py
 
 ---
 
-## 第五阶段：部署启动
+## 第五阶段：快速部署启动
 
-### 步骤 11：启动 LightRAG 服务
+### 步骤 11：使用自动化部署脚本（推荐）
+
+项目提供了自动化部署脚本，可以一键完成大部分部署工作：
+
+1. **使用自动化部署脚本**：
+```bash
+# 给脚本执行权限（Linux/macOS）
+chmod +x deploy.sh
+
+# 运行自动化部署脚本
+./deploy.sh
+
+# Windows 用户可以使用 Git Bash 或 WSL 运行，或者手动执行脚本中的命令
+```
+
+2. **脚本功能说明**：
+   - 自动检查系统环境
+   - 安装 Docker 和 Docker Compose（如果未安装）
+   - 创建必要的目录结构
+   - 配置防火墙规则
+   - 启动服务并进行健康检查
+   - 显示部署结果和访问信息
+
+### 步骤 11.1：手动部署启动（备选方案）
+
+如果不使用自动化脚本，可以手动执行以下步骤：
 
 1. **构建和启动服务**：
 ```bash
-# 构建并启动服务
+# 生产环境部署（推荐）
 docker-compose up --build -d
+
+# 或者开发环境部署
+docker-compose --profile dev up --build -d
 
 # 查看服务状态
 docker-compose ps
@@ -506,10 +560,10 @@ docker-compose ps
 2. **查看启动日志**：
 ```bash
 # 实时查看日志
-docker-compose logs -f lightrag
+docker-compose logs -f lightrag-api
 
 # 查看最近的日志
-docker-compose logs --tail=100 lightrag
+docker-compose logs --tail=100 lightrag-api
 ```
 
 3. **等待服务完全启动**（通常需要1-2分钟）
@@ -753,67 +807,52 @@ EOF
 chmod +x monitor.sh
 ```
 
-### 步骤 19：备份配置
+### 步骤 19：使用项目提供的备份脚本
 
-1. **创建自动备份脚本**：
+项目已经包含了完整的备份和恢复脚本：
+
+1. **使用自动备份脚本**：
 ```bash
-cat > backup.sh << 'EOF'
-#!/bin/bash
-
-# 配置
-BACKUP_DIR="./backups"
-DATE=$(date +%Y%m%d_%H%M%S)
-DB_BACKUP="$BACKUP_DIR/lightrag_db_$DATE.sql"
-CONFIG_BACKUP="$BACKUP_DIR/lightrag_config_$DATE.tar.gz"
-
-# 创建备份目录
-mkdir -p $BACKUP_DIR
-
-echo "🔄 开始备份 LightRAG 数据..."
-
-# 备份数据库
-echo "📊 备份数据库..."
-PGPASSWORD=$POSTGRES_PASSWORD pg_dump \
-  -h $POSTGRES_HOST \
-  -p $POSTGRES_PORT \
-  -U $POSTGRES_USER \
-  -d $POSTGRES_DATABASE \
-  --no-password \
-  > $DB_BACKUP
-
-if [ $? -eq 0 ]; then
-    echo "✅ 数据库备份成功: $DB_BACKUP"
-    gzip $DB_BACKUP
-else
-    echo "❌ 数据库备份失败"
-fi
-
-# 备份配置文件
-echo "📁 备份配置文件..."
-tar -czf $CONFIG_BACKUP .env docker-compose.yml Dockerfile
-
-if [ $? -eq 0 ]; then
-    echo "✅ 配置备份成功: $CONFIG_BACKUP"
-else
-    echo "❌ 配置备份失败"
-fi
-
-# 清理旧备份（保留30天）
-echo "🧹 清理旧备份文件..."
-find $BACKUP_DIR -name "*.sql.gz" -mtime +30 -delete
-find $BACKUP_DIR -name "*.tar.gz" -mtime +30 -delete
-
-echo "🎉 备份完成!"
-EOF
-
+# 给脚本执行权限（Linux/macOS）
 chmod +x backup.sh
+
+# 运行备份脚本
+./backup.sh
+
+# Windows 用户可以使用 Git Bash 或 WSL 运行
 ```
 
-2. **设置定期备份**：
+2. **备份脚本功能**：
+   - **应用数据备份**：RAG 存储、输入文件、日志、配置文件
+   - **Docker 数据备份**：Redis 数据卷
+   - **数据库备份**：Supabase PostgreSQL 数据
+   - **自动清理**：删除超过 30 天的旧备份
+   - **完整性验证**：验证备份文件的完整性
+   - **备份报告**：生成详细的备份报告
+
+3. **设置定期备份**：
 ```bash
 # 添加到 crontab（每天凌晨2点备份）
 echo "0 2 * * * /path/to/your/project/backup.sh" | crontab -
+
+# 查看当前的定时任务
+crontab -l
 ```
+
+4. **从备份恢复**：
+```bash
+# 备份脚本包含恢复功能，查看帮助信息
+./backup.sh --help
+
+# 恢复特定日期的备份
+./backup.sh --restore 20250101_020000
+```
+
+5. **备份文件位置**：
+   - 备份文件存储在 `./backups/` 目录
+   - 数据库备份：`lightrag_db_YYYYMMDD_HHMMSS.sql.gz`
+   - 配置备份：`lightrag_config_YYYYMMDD_HHMMSS.tar.gz`
+   - 应用数据备份：`lightrag_data_YYYYMMDD_HHMMSS.tar.gz`
 
 ---
 
