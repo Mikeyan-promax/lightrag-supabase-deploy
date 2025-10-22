@@ -74,6 +74,12 @@ api = [
     "python-multipart",
     "pytz",
     "uvicorn",
+    # Production server dependencies
+    "gunicorn",
+    # PostgreSQL dependencies for Railway deployment
+    "psycopg2-binary",
+    "psycopg[binary,pool]",
+    "psycopg-pool",
 ]
 
 [project.scripts]

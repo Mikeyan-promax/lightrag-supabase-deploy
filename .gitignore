@@ -20,6 +20,10 @@ lightrag_env/
 .env_*
 config.ini
 
+# Railway部署文件 - 允许.env.railway模板文件，但排除实际的环境变量
+!.env.railway
+.env.railway.local
+
 # Build / Distribution
 dist/
 build/
