@@ -74,6 +74,11 @@ def main():
     os.environ['LLM_BINDING_API_KEY'] = deepseek_key
     os.environ['OPENAI_API_KEY'] = deepseek_key
     
+    # 关键修复：设置OPENAI_API_BASE环境变量，覆盖LightRAG源码中的默认值
+    os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
+    
+    print(f"✅ 强制设置OPENAI_API_BASE为DeepSeek端点: https://api.deepseek.com/v1")
+    
     # 设置嵌入模型环境变量
     os.environ['EMBEDDING_BINDING'] = 'openai'
     os.environ['EMBEDDING_MODEL'] = 'doubao-embedding-text-240715'
