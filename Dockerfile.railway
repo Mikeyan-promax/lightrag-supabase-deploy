@@ -93,6 +93,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Railway会自动分配端口，使用PORT环境变量
 EXPOSE ${PORT:-9621}
 
-# 启动命令 - 使用我们的启动脚本确保环境变量正确设置
+# 启动命令 - 先执行调试脚本，然后启动应用
 # Railway会自动设置PORT环境变量
-CMD ["python", "start.py"]
+CMD ["sh", "-c", "python debug_startup.py && python start.py"]
