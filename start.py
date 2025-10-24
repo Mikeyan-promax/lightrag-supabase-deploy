@@ -6,6 +6,13 @@ LightRAG 服务启动脚本
 支持多种部署环境和配置选项
 """
 
+# 🔥🔥🔥 RAILWAY 强制诊断 - 版本检查 🔥🔥🔥
+print("🔥" * 100)
+print("🚨🚨🚨 RAILWAY 部署诊断 - 版本 v5.0 - 2025-01-24 🚨🚨🚨")
+print("🔥" * 100)
+print("如果你在Railway日志中看到这条消息，说明代码版本正确！")
+print("🔥" * 100)
+
 import os
 import sys
 import subprocess
