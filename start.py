@@ -10,6 +10,11 @@ import subprocess
 
 def main():
     """主启动函数"""
+    # 🔥 关键修复：在最开始就强制设置OPENAI_API_BASE
+    print("\n=== 🔥 强制设置API端点 ===")
+    os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
+    print(f"✅ 强制设置 OPENAI_API_BASE = {os.environ['OPENAI_API_BASE']}")
+    
     # 检查并处理.env文件
     if os.path.exists('.env.railway') and not os.path.exists('.env'):
         print("发现.env.railway文件，复制为.env文件")
@@ -19,6 +24,15 @@ def main():
         print("使用现有的.env文件")
     else:
         print("警告：未找到.env或.env.railway文件")
+    
+    # 🔥 再次确认OPENAI_API_BASE设置
+    current_base = os.environ.get('OPENAI_API_BASE')
+    if current_base != 'https://api.deepseek.com/v1':
+        print(f"⚠️  检测到OPENAI_API_BASE被覆盖为: {current_base}")
+        os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
+        print(f"🔧 重新强制设置 OPENAI_API_BASE = {os.environ['OPENAI_API_BASE']}")
+    else:
+        print(f"✅ OPENAI_API_BASE 确认正确: {current_base}")
     
     # Railway环境变量检查和设置
     print("\n=== Railway环境变量检查 ===")
@@ -142,18 +156,41 @@ def main():
     
     print(f"启动命令: {' '.join(cmd)}")
     
-    # 在启动LightRAG服务前再次确保OPENAI_API_BASE设置正确
-    os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
-    print(f"🔧 启动前最终确认OPENAI_API_BASE: {os.environ.get('OPENAI_API_BASE')}")
+    # 🔥 最终检查：在启动LightRAG服务前再次确保OPENAI_API_BASE设置正确
+    print(f"\n=== 🔥 最终API端点检查 ===")
+    final_base = os.environ.get('OPENAI_API_BASE')
+    if final_base != 'https://api.deepseek.com/v1':
+        print(f"⚠️  最终检查发现OPENAI_API_BASE不正确: {final_base}")
+        os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
+        print(f"🔧 最终强制设置 OPENAI_API_BASE = {os.environ['OPENAI_API_BASE']}")
+    else:
+        print(f"✅ 最终确认OPENAI_API_BASE正确: {final_base}")
     
-    # 执行命令
+    # 打印所有关键环境变量的最终状态
+    print(f"\n=== 🔍 最终环境变量状态 ===")
+    critical_vars = {
+        'OPENAI_API_BASE': os.environ.get('OPENAI_API_BASE'),
+        'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'NOT_SET')[:20] + '...' if os.environ.get('OPENAI_API_KEY') else 'NOT_SET',
+        'LLM_BINDING': os.environ.get('LLM_BINDING'),
+        'LLM_MODEL': os.environ.get('LLM_MODEL'),
+        'LLM_BINDING_HOST': os.environ.get('LLM_BINDING_HOST'),
+        'LLM_BINDING_API_KEY': os.environ.get('LLM_BINDING_API_KEY', 'NOT_SET')[:20] + '...' if os.environ.get('LLM_BINDING_API_KEY') else 'NOT_SET'
+    }
+    
+    for var, value in critical_vars.items():
+        print(f"  {var}: {value}")
+    
+    print(f"\n🚀 启动LightRAG服务器...")
+    print(f"📍 访问地址: http://0.0.0.0:{port}")
+    
+    # 启动服务
     try:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as e:
-        print(f"启动失败: {e}")
+        print(f"❌ 启动失败: {e}")
         sys.exit(1)
     except KeyboardInterrupt:
-        print("收到中断信号，正在退出...")
+        print("\n⏹️  服务已停止")
         sys.exit(0)
 
 if __name__ == '__main__':
