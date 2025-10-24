@@ -73,13 +73,6 @@ def main():
     os.environ['LLM_BINDING_HOST'] = 'https://api.deepseek.com'
     os.environ['LLM_BINDING_API_KEY'] = deepseek_key
     os.environ['OPENAI_API_KEY'] = deepseek_key
-
-
-        # 关键修复：设置OPENAI_API_BASE环境变量，覆盖LightRAG源码中的默认值
-    os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
-    
-    print(f"✅ 强制设置OPENAI_API_BASE为DeepSeek端点: https://api.deepseek.com/v1")
-
     
     # 关键修复：设置OPENAI_API_BASE环境变量，覆盖LightRAG源码中的默认值
     os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
@@ -148,6 +141,10 @@ def main():
     ]
     
     print(f"启动命令: {' '.join(cmd)}")
+    
+    # 在启动LightRAG服务前再次确保OPENAI_API_BASE设置正确
+    os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
+    print(f"🔧 启动前最终确认OPENAI_API_BASE: {os.environ.get('OPENAI_API_BASE')}")
     
     # 执行命令
     try:
