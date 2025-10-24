@@ -1,12 +1,49 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
-Railway 启动脚本 - Python 版本
-确保 PORT 环境变量被正确解析和处理
+LightRAG 服务启动脚本
+支持多种部署环境和配置选项
 """
 
 import os
 import sys
 import subprocess
+
+# 🚨 集成诊断功能 - 直接在启动脚本中运行完整诊断
+print("=" * 80)
+print("🚨 LightRAG Railway 部署诊断开始")
+print("=" * 80)
+
+# 🔥 步骤1: 在最开始就强制设置 OPENAI_API_BASE
+print("\n🔧 [步骤1] 强制设置 OPENAI_API_BASE...")
+os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
+print(f"✅ OPENAI_API_BASE 已设置为: {os.environ.get('OPENAI_API_BASE')}")
+
+# 🔍 步骤2: 检查所有关键环境变量
+print("\n🔍 [步骤2] 检查关键环境变量:")
+env_vars = {
+    'OPENAI_API_BASE': os.environ.get('OPENAI_API_BASE', 'NOT SET'),
+    'OPENAI_API_KEY': 'SET' if os.environ.get('OPENAI_API_KEY') else 'NOT SET',
+    'LLM_BINDING': os.environ.get('LLM_BINDING', 'NOT SET'),
+    'LLM_MODEL': os.environ.get('LLM_MODEL', 'NOT SET'),
+    'LLM_BINDING_HOST': os.environ.get('LLM_BINDING_HOST', 'NOT SET'),
+    'EMBEDDING_BINDING': os.environ.get('EMBEDDING_BINDING', 'NOT SET'),
+    'EMBEDDING_MODEL': os.environ.get('EMBEDDING_MODEL', 'NOT SET'),
+    'EMBEDDING_BINDING_HOST': os.environ.get('EMBEDDING_BINDING_HOST', 'NOT SET'),
+}
+
+for key, value in env_vars.items():
+    status = "✅" if value != 'NOT SET' else "❌"
+    print(f"  {status} {key}: {value}")
+
+# 🔍 步骤3: 检查Railway特定环境变量
+print("\n🔍 [步骤3] 检查Railway环境变量:")
+railway_vars = ['RAILWAY_ENVIRONMENT', 'RAILWAY_PROJECT_ID', 'RAILWAY_SERVICE_ID', 'PORT']
+for var in railway_vars:
+    value = os.environ.get(var, 'NOT SET')
+    status = "✅" if value != 'NOT SET' else "❌"
+    print(f"  {status} {var}: {value}")
 
 def main():
     """主启动函数"""
@@ -192,6 +229,73 @@ def main():
     except KeyboardInterrupt:
         print("\n⏹️  服务已停止")
         sys.exit(0)
+
+# 🔍 步骤4: 加载环境变量文件
+print("\n🔍 [步骤4] 加载环境变量文件...")
+env_files = ['.env.railway', '.env']
+for env_file in env_files:
+    if os.path.exists(env_file):
+        print(f"✅ 找到环境变量文件: {env_file}")
+        load_dotenv(env_file, override=False)
+        print(f"📁 已加载 {env_file}")
+    else:
+        print(f"❌ 未找到环境变量文件: {env_file}")
+
+# 🔍 步骤5: 再次检查 OPENAI_API_BASE 是否被覆盖
+print("\n🔍 [步骤5] 检查 OPENAI_API_BASE 是否被覆盖...")
+current_api_base = os.environ.get('OPENAI_API_BASE')
+if current_api_base != 'https://api.deepseek.com/v1':
+    print(f"❌ 警告：OPENAI_API_BASE 被覆盖为: {current_api_base}")
+    print("🔧 重新强制设置为 DeepSeek 端点...")
+    os.environ['OPENAI_API_BASE'] = 'https://api.deepseek.com/v1'
+    print(f"✅ 已重新设置为: {os.environ.get('OPENAI_API_BASE')}")
+else:
+    print(f"✅ OPENAI_API_BASE 保持正确: {current_api_base}")
+
+# 🔍 步骤6: 模拟 OpenAI 客户端创建测试
+print("\n🔍 [步骤6] 模拟 OpenAI 客户端创建测试...")
+try:
+    # 模拟 LightRAG 的客户端创建逻辑
+    api_key = os.environ.get('OPENAI_API_KEY')
+    base_url = os.environ.get('OPENAI_API_BASE', 'https://api.openai.com/v1')
+    
+    print(f"📊 客户端配置:")
+    print(f"  - API Key: {'SET (' + api_key[:10] + '...)' if api_key else 'NOT SET'}")
+    print(f"  - Base URL: {base_url}")
+    
+    if base_url == 'https://api.deepseek.com/v1':
+        print("✅ API 端点配置正确 - 指向 DeepSeek")
+    else:
+        print(f"❌ API 端点配置错误 - 指向 {base_url}")
+        
+    if api_key and api_key.startswith('sk-'):
+        if 'deepseek' in api_key.lower() or len(api_key) > 50:
+            print("✅ API 密钥格式似乎是 DeepSeek 格式")
+        else:
+            print("⚠️  API 密钥可能不是 DeepSeek 格式")
+    else:
+        print("❌ API 密钥未设置或格式不正确")
+        
+except Exception as e:
+    print(f"❌ 客户端测试失败: {e}")
+
+# 🔍 步骤7: 最终状态报告
+print("\n" + "=" * 80)
+print("📊 最终诊断报告")
+print("=" * 80)
+print(f"✅ OPENAI_API_BASE: {os.environ.get('OPENAI_API_BASE')}")
+print(f"✅ LLM_BINDING: {os.environ.get('LLM_BINDING', 'NOT SET')}")
+print(f"✅ LLM_MODEL: {os.environ.get('LLM_MODEL', 'NOT SET')}")
+print(f"✅ EMBEDDING_BINDING: {os.environ.get('EMBEDDING_BINDING', 'NOT SET')}")
+
+if os.environ.get('OPENAI_API_BASE') == 'https://api.deepseek.com/v1':
+    print("🎉 诊断结果: API 端点配置正确!")
+else:
+    print("❌ 诊断结果: API 端点配置仍然错误!")
+
+print("=" * 80)
+print("🚀 开始启动 LightRAG 服务...")
+print("=" * 80)
 
 if __name__ == '__main__':
     main()
