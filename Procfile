@@ -1,1 +1,1 @@
-web: python debug_startup.py && python start.py
+web: python verify_api_config.py && python start.py
